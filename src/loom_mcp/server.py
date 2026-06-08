@@ -132,7 +132,7 @@ def _ids(values: list[str], label: str = "ID") -> list[str]:
 async def list_videos(
     ctx: Context,
     limit: Annotated[
-        int, Field(description="Max videos to return (default 50)", ge=1, le=200)
+        int, Field(description="Max videos to return; 0 = all un-foldered videos", ge=0)
     ] = 50,
 ) -> str:
     """List your Loom videos, sorted by most recent.
@@ -143,8 +143,8 @@ async def list_videos(
     client = _get_client(ctx)
     videos = []
     cursor = None
-    while len(videos) < limit:
-        batch_size = min(50, limit - len(videos))
+    while limit == 0 or len(videos) < limit:
+        batch_size = 50 if limit == 0 else min(50, limit - len(videos))
         result = await _call(client.list_videos(limit=batch_size, cursor=cursor))
         videos.extend(result["videos"])
         if not result["hasNextPage"]:
