@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- `get_sharing`, `set_video_privacy` (owner / workspace / public) and `set_video_password` (null removes; an empty string is rejected because Loom keeps the old password). Both write tools re-read and return the sharing state. Verified live 2026-10-23, including as an anonymous viewer.
 - GitHub Actions CI workflow (lint, format, test) triggered on push and PRs
 - PyPI publish workflow using OIDC trusted publishing, triggered on version tags
 - mise tasks: `install`, `lint`, `format`, `test`, `build`

@@ -1005,6 +1005,47 @@ class LoomClient:
         )
         return data.get("updateVideoSettings") or {}
 
+    async def get_sharing(self, video_id: str) -> dict:
+        data = await self.graphql(
+            "GetVideoSharing",
+            """query GetVideoSharing($id: ID!) {
+              getVideo(id: $id) {
+                ... on RegularUserVideo { id name privacy hasPassword is_protected }
+                ... on PrivateVideo { id message }
+              }
+            }""",
+            {"id": video_id},
+        )
+        return data.get("getVideo") or {}
+
+    async def update_privacy(self, video_id: str, privacy: str) -> dict:
+        data = await self.graphql(
+            "UpdateVideoPrivacyStatus",
+            """mutation UpdateVideoPrivacyStatus($videoId: ID!, $privacy: VideoPrivacyStatus!) {
+              updateVideoPrivacyStatus(videoId: $videoId, privacy: $privacy) {
+                __typename
+                ... on GenericError { message }
+              }
+            }""",
+            {"videoId": video_id, "privacy": privacy},
+        )
+        return data.get("updateVideoPrivacyStatus") or {}
+
+    async def update_password(self, video_id: str, password: str | None) -> dict:
+        """Set a password, or remove it with None (an empty string does NOT remove it)."""
+        data = await self.graphql(
+            "UpdateVideoPassword",
+            """mutation UpdateVideoPassword($videoId: ID!, $password: String) {
+              updateVideoPassword(videoId: $videoId, password: $password) {
+                __typename
+                ... on UpdateVideoPasswordPayload { success }
+                ... on GenericError { message }
+              }
+            }""",
+            {"videoId": video_id, "password": password},
+        )
+        return data.get("updateVideoPassword") or {}
+
     async def update_video_task(self, task_id: str, content: str) -> dict:
         data = await self.graphql(
             "UpdateVideoTask",

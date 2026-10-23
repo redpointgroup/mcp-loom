@@ -3,7 +3,7 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastmcp import FastMCP, Context
 from fastmcp.exceptions import ToolError
@@ -1072,6 +1072,84 @@ async def update_video_settings(
         client.update_video_settings(_id(video_id, "video ID"), settings)
     )
     return json.dumps(result, indent=2)
+
+
+@mcp.tool(
+    tags={"read"},
+    timeout=30.0,
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+    },
+)
+async def get_sharing(
+    ctx: Context,
+    video_id: Annotated[str, "The Loom video ID"],
+) -> str:
+    """Get who can view a Loom video: privacy (owner, workspace, public) and whether it has a password."""
+    client = _get_client(ctx)
+    result = await _call(client.get_sharing(_id(video_id, "video ID")))
+    if result.get("message"):
+        raise ToolError(result["message"])
+    return json.dumps(result, indent=2)
+
+
+async def _sharing_or_error(client: LoomClient, video_id: str, result: dict) -> str:
+    """Raise on a GraphQL error payload, else return the re-read sharing state."""
+    if result.get("message"):
+        raise ToolError(result["message"])
+    after = await _call(client.get_sharing(video_id))
+    return json.dumps({"result": result.get("__typename"), "now": after}, indent=2)
+
+
+@mcp.tool(
+    tags={"write"},
+    timeout=30.0,
+    annotations={
+        "readOnlyHint": False,
+        "destructiveHint": True,
+        "idempotentHint": True,
+    },
+)
+async def set_video_privacy(
+    ctx: Context,
+    video_id: Annotated[str, "The Loom video ID"],
+    privacy: Annotated[
+        Literal["owner", "workspace", "public"],
+        "owner = only you; workspace = your Loom workspace; public = anyone with the link",
+    ],
+) -> str:
+    """Set who can view a Loom video (the share dialog's general access). Returns the re-read state."""
+    client = _get_client(ctx)
+    vid = _id(video_id, "video ID")
+    result = await _call(client.update_privacy(vid, privacy))
+    return await _sharing_or_error(client, vid, result)
+
+
+@mcp.tool(
+    tags={"write"},
+    timeout=30.0,
+    annotations={
+        "readOnlyHint": False,
+        "destructiveHint": True,
+        "idempotentHint": True,
+    },
+)
+async def set_video_password(
+    ctx: Context,
+    video_id: Annotated[str, "The Loom video ID"],
+    password: Annotated[
+        str | None, "The new password, or null to remove the password"
+    ] = None,
+) -> str:
+    """Set or remove the password on a Loom video. Returns the re-read state."""
+    if password is not None and not password.strip():
+        raise ToolError("Empty password: pass null to remove the password")
+    client = _get_client(ctx)
+    vid = _id(video_id, "video ID")
+    result = await _call(client.update_password(vid, password))
+    return await _sharing_or_error(client, vid, result)
 
 
 @mcp.tool(

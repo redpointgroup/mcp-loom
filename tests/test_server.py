@@ -48,6 +48,7 @@ READ_TOOLS = {
     "search_workspace_tags",
     "get_folder",
     "get_space",
+    "get_sharing",
 }
 
 DESTRUCTIVE_TOOLS = {
@@ -66,6 +67,8 @@ DESTRUCTIVE_TOOLS = {
     "delete_folders",
     "move_videos",
     "move_folders",
+    "set_video_privacy",
+    "set_video_password",
 }
 
 CREATE_TOOLS = {
@@ -111,7 +114,7 @@ async def test_all_tools_registered(client):
 @pytest.mark.anyio
 async def test_tool_count(client):
     tools = await client.list_tools()
-    assert len(tools) == 60
+    assert len(tools) == 63
 
 
 @pytest.mark.anyio
@@ -502,6 +505,94 @@ async def test_regenerate_mp4_generic_error(client):
         )
     assert result.is_error
     assert "Something went wrong" in result.content[0].text
+
+
+SHARING = {
+    "id": VALID_ID,
+    "name": "Demo",
+    "privacy": "public",
+    "hasPassword": True,
+    "is_protected": True,
+}
+
+
+@pytest.mark.anyio
+async def test_set_video_privacy_rereads_state(client):
+    with (
+        patch(
+            "loom_mcp.server.LoomClient.update_privacy",
+            new_callable=AsyncMock,
+            return_value={"__typename": "UpdateVideoPrivacyStatusPayload"},
+        ) as upd,
+        patch(
+            "loom_mcp.server.LoomClient.get_sharing",
+            new_callable=AsyncMock,
+            return_value=SHARING,
+        ),
+    ):
+        result = await client.call_tool(
+            "set_video_privacy", {"video_id": VALID_ID, "privacy": "public"}
+        )
+    upd.assert_awaited_once_with(VALID_ID, "public")
+    assert '"privacy": "public"' in result.content[0].text
+
+
+@pytest.mark.anyio
+async def test_set_video_privacy_rejects_unknown_value(client):
+    result = await client.call_tool(
+        "set_video_privacy",
+        {"video_id": VALID_ID, "privacy": "everyone"},
+        raise_on_error=False,
+    )
+    assert result.is_error
+
+
+@pytest.mark.anyio
+async def test_set_video_privacy_generic_error(client):
+    with patch(
+        "loom_mcp.server.LoomClient.update_privacy",
+        new_callable=AsyncMock,
+        return_value={"__typename": "GenericError", "message": "Not allowed"},
+    ):
+        result = await client.call_tool(
+            "set_video_privacy",
+            {"video_id": VALID_ID, "privacy": "public"},
+            raise_on_error=False,
+        )
+    assert result.is_error
+    assert "Not allowed" in result.content[0].text
+
+
+@pytest.mark.anyio
+async def test_set_video_password_null_removes(client):
+    with (
+        patch(
+            "loom_mcp.server.LoomClient.update_password",
+            new_callable=AsyncMock,
+            return_value={"__typename": "UpdateVideoPasswordPayload", "success": True},
+        ) as upd,
+        patch(
+            "loom_mcp.server.LoomClient.get_sharing",
+            new_callable=AsyncMock,
+            return_value={**SHARING, "hasPassword": False},
+        ),
+    ):
+        result = await client.call_tool(
+            "set_video_password", {"video_id": VALID_ID, "password": None}
+        )
+    upd.assert_awaited_once_with(VALID_ID, None)
+    assert '"hasPassword": false' in result.content[0].text
+
+
+@pytest.mark.anyio
+async def test_set_video_password_rejects_empty(client):
+    result = await client.call_tool(
+        "set_video_password",
+        {"video_id": VALID_ID, "password": "  "},
+        raise_on_error=False,
+    )
+    assert result.is_error
+    assert "pass null" in result.content[0].text
 
 
 @pytest.mark.anyio
